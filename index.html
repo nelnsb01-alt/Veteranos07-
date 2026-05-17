@@ -189,7 +189,7 @@
             <div class="bg-stone-950 border-2 border-amber-500 p-4 rounded-2xl flex justify-between items-center shadow-xl">
                 <div>
                     <h3 class="font-black text-amber-500 text-sm uppercase tracking-wider">Painel Técnico Administrativo</h3>
-                    <p class="text-[10px] text-stone-400 font-medium">Controle total de elenco, súmula de multas, caixa e sócios com armazenamento local.</p>
+                    <p class="text-[10px] text-stone-400 font-medium">Controle total de elenco, súmula de multas, caixa e sócios conectado ao Firebase.</p>
                 </div>
                 <button onclick="logoutAdmin()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 text-xs font-black rounded-lg uppercase transition">Fechar</button>
             </div>
@@ -369,90 +369,57 @@
         </div>
     </div>
 
-    <!-- CONFIGURAÇÃO E INTEGRAÇÃO FIREBASE -->
+    <!-- MOTOR LÓGICO EXCLUSIVAMENTE CONECTADO AO FIREBASE -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getDatabase, ref, set, onValue, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+        import { getDatabase, ref, set, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
         const firebaseConfig = {
-            apiKey: "AIzaSyAG0AJBv7gSRDFBglyOm4qYgbuw2kfmft4",
-            authDomain: "veteranos-2027-852cd.firebaseapp.com",
-            databaseURL: "https://veteranos-2027-852cd-default-rtdb.firebaseio.com",
-            projectId: "veteranos-2027-852cd",
-            storageBucket: "veteranos-2027-852cd.firebasestorage.app",
-            messagingSenderId: "648270855318",
-            appId: "1:648270855318:web:0b092943ac47f34d5396b7"
+          apiKey: "AIzaSyAG0AJBv7gSRDFBglyOm4qYgbuw2kfmft4",
+          authDomain: "veteranos-2027-852cd.firebaseapp.com",
+          databaseURL: "https://veteranos-2027-852cd-default-rtdb.firebaseio.com",
+          projectId: "veteranos-2027-852cd",
+          storageBucket: "veteranos-2027-852cd.firebasestorage.app",
+          messagingSenderId: "648270855318",
+          appId: "1:648270855318:web:0b092943ac47f34d5396b7"
         };
 
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
-        // Referências Globais para o escopo do Script
-        window.atletasCache = [];
-        window.gastosCache = [];
-        window.sociosCache = []; // Os sócios continuarão locais ou podem ser acoplados conforme demanda
+        let atletasCache = [];
+        let gastosCache = [];
+        let sociosCache = JSON.parse(localStorage.getItem('baba_socios')) || []; // Mantido local pois regras não cobrem sócios
 
-        if(localStorage.getItem('baba_socios')) {
-            window.sociosCache = JSON.parse(localStorage.getItem('baba_socios'));
-        }
-
-        // Ouvintes Realtime para Atletas e Gastos
-        onValue(ref(db, 'atletas'), (snapshot) => {
-            const data = snapshot.val();
-            window.atletasCache = data ? Object.values(data) : [];
-            window.renderizarTudo();
-        });
-
-        onValue(ref(db, 'gastos'), (snapshot) => {
-            const data = snapshot.val();
-            window.gastosCache = data ? Object.values(data) : [];
-            window.renderizarTudo();
-        });
-
-        // Funções de Persistência Firebase com Injeção de 'chaveAdmin' exigida pelas regras
-        window.saveAtletaFirebase = function(atleta) {
-            const atletaPronto = { ...atleta, chaveAdmin: "veteranos07" };
-            set(ref(db, 'atletas/' + atleta.id), atletaPronto)
-                .then(() => window.mostrarToast("Dados atualizados na Nuvem!"))
-                .catch(err => console.error("Erro nas regras do Firebase: ", err));
-        };
-
-        window.deleteAtletaFirebase = function(id) {
-            remove(ref(db, 'atletas/' + id))
-                .then(() => window.mostrarToast("Atleta removido!"))
-                .catch(err => console.error("Erro de permissão ao deletar: ", err));
-        };
-
-        window.saveGastoFirebase = function(gasto) {
-            const gastoPronto = { ...gasto, chaveAdmin: "veteranos07" };
-            set(ref(db, 'gastos/' + gasto.id), gastoPronto)
-                .then(() => window.mostrarToast("Gasto computado na Nuvem!"))
-                .catch(err => console.error("Erro nas regras do Firebase: ", err));
-        };
-
-        window.deleteGastoFirebase = function(id) {
-            remove(ref(db, 'gastos/' + id))
-                .then(() => window.mostrarToast("Lançamento apagado!"));
-        };
-
-        window.salvarSociosLocal = function() {
-            localStorage.setItem('baba_socios', JSON.stringify(window.sociosCache));
-            window.renderizarTudo();
-        };
-    </script>
-
-    <!-- MOTOR LÓGICO INTEGRADO -->
-    <script>
         let timeFiltroAtual = 'FLUMINENSE';
-        let isAdminLogado = false;
+        window.isAdminLogado = false;
 
         const mesesNomes = {
             "01": "Janeiro", "02": "Fevereiro", "03": "Março", "04": "Abril", "05": "Maio", "06": "Junho", "07": "Julho"
         };
 
+        // Escutando dados de Atletas em tempo real
+        onValue(ref(db, 'atletas'), (snapshot) => {
+            const data = snapshot.val();
+            atletasCache = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
+            renderizarTudo();
+        });
+
+        // Escutando dados de Gastos em tempo real
+        onValue(ref(db, 'gastos'), (snapshot) => {
+            const data = snapshot.val();
+            gastosCache = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
+            renderizarTudo();
+        });
+
+        function salvarSociosLocal() {
+            localStorage.setItem('baba_socios', JSON.stringify(sociosCache));
+            renderizarTudo();
+        }
+
         function mostrarToast(mensagem) {
             const toast = document.getElementById('toast-notificacao');
-            document.getElementById('toast-mensagem').innerText = message = mensagem;
+            document.getElementById('toast-mensagem').innerText = mensagem;
             toast.classList.remove('translate-x-72');
             setTimeout(() => toast.classList.add('translate-x-72'), 2000);
         }
@@ -462,7 +429,7 @@
             renderListaJogadoresPublica();
             renderFinanceiroPublico();
             
-            if (isAdminLogado) {
+            if (window.isAdminLogado) {
                 renderAdminAtletas();
                 renderAdminScouts();
                 renderAdminSocios();
@@ -482,7 +449,9 @@
                         if (a.pagamentos[mes].pago) totalArrecadado += 25;
                         totalArrecadado += Number(a.pagamentos[mes].extra || 0);
                         if (a.pagamentos[mes].multas) {
-                            a.pagamentos[mes].multas.forEach(m => { if(m.paga) totalArrecadado += Number(m.valor); });
+                            // Suporta tanto array quanto objeto do Firebase
+                            const multasArr = Array.isArray(a.pagamentos[mes].multas) ? a.pagamentos[mes].multas : Object.values(a.pagamentos[mes].multas);
+                            multasArr.forEach(m => { if(m.paga) totalArrecadado += Number(m.valor); });
                         }
                     });
                 }
@@ -519,7 +488,8 @@
                 if (a.pagamentos) {
                     Object.keys(a.pagamentos).forEach(m => {
                         if(a.pagamentos[m].multas){
-                            a.pagamentos[m].multas.forEach(multa => { if(!multa.paga) debitoTotal += Number(multa.valor); });
+                            const multasArr = Array.isArray(a.pagamentos[m].multas) ? a.pagamentos[m].multas : Object.values(a.pagamentos[m].multas);
+                            multasArr.forEach(multa => { if(!multa.paga) debitoTotal += Number(multa.valor); });
                         }
                     });
                 }
@@ -558,7 +528,10 @@
                     let totalMultasAberto = 0;
                     if(achado.pagamentos) {
                         Object.keys(achado.pagamentos).forEach(m => {
-                            if(achado.pagamentos[m].multas) achado.pagamentos[m].multas.forEach(ml => { if(!ml.paga) totalMultasAberto += Number(ml.valor); });
+                            if(achado.pagamentos[m].multas) {
+                                const multasArr = Array.isArray(achado.pagamentos[m].multas) ? achado.pagamentos[m].multas : Object.values(achado.pagamentos[m].multas);
+                                multasArr.forEach(ml => { if(!ml.paga) totalMultasAberto += Number(ml.valor); });
+                            }
                         });
                     }
                     htmlStr += `
@@ -591,7 +564,14 @@
 
             atletasFiltrados.forEach(a => {
                 let mAcumulada = 0;
-                if(a.pagamentos) Object.keys(a.pagamentos).forEach(m => { if(a.pagamentos[m].multas) a.pagamentos[m].multas.forEach(mu => {if(!mu.paga) mAcumulada += Number(mu.valor);})});
+                if(a.pagamentos) {
+                    Object.keys(a.pagamentos).forEach(m => { 
+                        if(a.pagamentos[m].multas) {
+                            const multasArr = Array.isArray(a.pagamentos[m].multas) ? a.pagamentos[m].multas : Object.values(a.pagamentos[m].multas);
+                            multasArr.forEach(mu => {if(!mu.paga) mAcumulada += Number(mu.valor);})
+                        }
+                    });
+                }
                 
                 const suspenso = (a.amarelos || 0) >= 3 || (a.vermelho || 0) >= 1;
                 const statusPgto = a.pagamentos && a.pagamentos["05"] && a.pagamentos["05"].pago;
@@ -622,7 +602,10 @@
                         if (mensalMap[mes]) {
                             if (a.pagamentos[mes].pago)  mensalMap[mes].fixo += 25;
                             if (a.pagamentos[mes].extra) mensalMap[mes].extra += Number(a.pagamentos[mes].extra);
-                            if (a.pagamentos[mes].multas) a.pagamentos[mes].multas.forEach(ml => { if(ml.paga) mensalMap[mes].multas += Number(ml.valor); });
+                            if (a.pagamentos[mes].multas) {
+                                const multasArr = Array.isArray(a.pagamentos[mes].multas) ? a.pagamentos[mes].multas : Object.values(a.pagamentos[mes].multas);
+                                multasArr.forEach(ml => { if(ml.paga) mensalMap[mes].multas += Number(ml.valor); });
+                            }
                         }
                     });
                 }
@@ -646,7 +629,7 @@
         window.autenticarAdmin = function(e) {
             e.preventDefault();
             if(document.getElementById('login-user').value === 'veteranos07' && document.getElementById('login-pass').value === 'veteranos07') {
-                isAdminLogado = true;
+                window.isAdminLogado = true;
                 document.getElementById('login-modal').classList.add('hidden');
                 document.getElementById('admin-badge').classList.remove('hidden');
                 switchTab('admin-panel');
@@ -657,7 +640,7 @@
         }
 
         window.logoutAdmin = function() {
-            isAdminLogado = false;
+            window.isAdminLogado = false;
             document.getElementById('admin-panel').classList.add('hidden');
             document.getElementById('admin-badge').classList.add('hidden');
             switchTab('dashboard');
@@ -665,20 +648,33 @@
 
         window.cadastrarAtleta = function(e) {
             e.preventDefault();
+            const idGerado = 'atleta_' + Date.now();
             const novo = {
-                id: 'atleta_' + Date.now(),
+                chaveAdmin: "veteranos07",
                 nome: document.getElementById('cad-nome').value.trim(),
                 camisa: parseInt(document.getElementById('cad-camisa').value),
                 time: document.getElementById('cad-time').value,
-                gols: 0, amarelos: 0, vermelho: 0, pagamentos: {}
+                gols: 0, 
+                amarelos: 0, 
+                vermelho: 0, 
+                pagamentos: {
+                    "05": { pago: false, extra: 0 }
+                }
             };
-            document.getElementById('form-cadastro-atleta').reset();
-            window.saveAtletaFirebase(novo);
+            
+            set(ref(db, 'atletas/' + idGerado), novo)
+                .then(() => {
+                    document.getElementById('form-cadastro-atleta').reset();
+                    mostrarToast("Atleta inscrito no Firebase!");
+                })
+                .catch(err => console.error("Erro ao salvar atleta:", err));
         }
 
         window.excluirAtleta = function(id) {
-            if(confirm("Remover atleta permanentemente?")) {
-                window.deleteAtletaFirebase(id);
+            if(confirm("Remover atleta permanentemente do Firebase?")) {
+                remove(ref(db, 'atletas/' + id))
+                    .then(() => mostrarToast("Atleta removido!"))
+                    .catch(err => console.error("Erro ao remover atleta:", err));
             }
         }
 
@@ -693,13 +689,13 @@
             sociosCache.push(novoSocio);
             document.getElementById('form-socio').reset();
             mostrarToast("Recibo do Sócio arquivado!");
-            window.salvarSociosLocal();
+            salvarSociosLocal();
         }
 
         window.excluirSocio = function(id) {
             if(confirm("Deletar este registro de sócio?")) {
                 sociosCache = sociosCache.filter(s => s.id !== id);
-                window.salvarSociosLocal();
+                salvarSociosLocal();
             }
         }
 
@@ -718,7 +714,8 @@
                 if(a.pagamentos) {
                     Object.keys(a.pagamentos).forEach(m => {
                         if(a.pagamentos[m].multas) {
-                            a.pagamentos[m].multas.forEach((multa, idx) => {
+                            const multasArr = Array.isArray(a.pagamentos[m].multas) ? a.pagamentos[m].multas : Object.values(a.pagamentos[m].multas);
+                            multasArr.forEach((multa, idx) => {
                                 multasListHtml += `
                                     <div class="bg-black/40 p-1 rounded my-1 border border-stone-800 flex justify-between items-center text-[10px]">
                                         <span class="${multa.paga?'line-through text-stone-500':'text-red-300'}">${multa.motivo} (R$ ${multa.valor})</span>
@@ -770,9 +767,15 @@
 
         window.alterarNumero = function(id, campo, valor) {
             const a = atletasCache.find(j => j.id === id);
-            if ((a[campo] || 0) + valor < 0) return;
-            a[campo] = (a[campo] || 0) + valor;
-            window.saveAtletaFirebase(a);
+            if (!a) return;
+            const novoValor = (a[campo] || 0) + valor;
+            if (novoValor < 0) return;
+
+            const updates = {};
+            updates[`/atletas/${id}/${campo}`] = novoValor;
+            updates[`/atletas/${id}/chaveAdmin`] = "veteranos07";
+
+            update(ref(db), updates);
         }
 
         window.aplicarMultaAtleta = function(id) {
@@ -781,25 +784,41 @@
             if(!motivoInput.value || !valorInput.value) return;
 
             const a = atletasCache.find(j => j.id === id);
-            if(!a.pagamentos) a.pagamentos = {};
-            if(!a.pagamentos["05"]) a.pagamentos["05"] = { pago: false, extra: 0, multas: [] };
-            if(!a.pagamentos["05"].multas) a.pagamentos["05"].multas = [];
+            let multasAtuais = [];
+            if(a.pagamentos && a.pagamentos["05"] && a.pagamentos["05"].multas) {
+                multasAtuais = Array.isArray(a.pagamentos["05"].multas) ? [...a.pagamentos["05"].multas] : Object.values(a.pagamentos["05"].multas);
+            }
 
-            a.pagamentos["05"].multas.push({
+            multasAtuais.push({
                 motivo: motivoInput.value.trim(),
                 valor: parseFloat(valorInput.value),
                 paga: false
             });
 
-            motivoInput.value = '';
-            valorInput.value = '';
-            window.saveAtletaFirebase(a);
+            const updates = {};
+            updates[`/atletas/${id}/pagamentos/05/multas`] = multasAtuais;
+            updates[`/atletas/${id}/pagamentos/05/pago`] = a.pagamentos?.["05"]?.pago || false;
+            updates[`/atletas/${id}/pagamentos/05/extra`] = a.pagamentos?.["05"]?.extra || 0;
+            updates[`/atletas/${id}/chaveAdmin`] = "veteranos07";
+
+            update(ref(db), updates).then(() => {
+                motivoInput.value = '';
+                valorInput.value = '';
+                mostrarToast("Multa registrada!");
+            });
         }
 
         window.toggleStatusMulta = function(atletaId, mes, idx, isChecked) {
             const a = atletasCache.find(j => j.id === atletaId);
-            a.pagamentos[mes].multas[idx].paga = isChecked;
-            window.saveAtletaFirebase(a);
+            let multasAtuais = Array.isArray(a.pagamentos[mes].multas) ? [...a.pagamentos[mes].multas] : Object.values(a.pagamentos[mes].multas);
+            
+            multasAtuais[idx].paga = isChecked;
+
+            const updates = {};
+            updates[`/atletas/${atletaId}/pagamentos/${mes}/multas`] = multasAtuais;
+            updates[`/atletas/${atletaId}/chaveAdmin`] = "veteranos07";
+            
+            update(ref(db), updates);
         }
 
         function renderAdminSocios() {
@@ -829,37 +848,54 @@
 
         window.toggleMensalidade = function(id, mes, isChecked) {
             const a = atletasCache.find(j => j.id === id);
-            if(!a.pagamentos) a.pagamentos = {};
-            if(!a.pagamentos[mes]) a.pagamentos[mes] = { pago: false, extra: 0, multas: [] };
-            a.pagamentos[mes].pago = isChecked;
-            window.saveAtletaFirebase(a);
+            const updates = {};
+            
+            updates[`/atletas/${id}/pagamentos/${mes}/pago`] = isChecked;
+            updates[`/atletas/${id}/pagamentos/${mes}/extra`] = a.pagamentos?.[mes]?.extra || 0;
+            updates[`/atletas/${id}/pagamentos/${mes}/multas`] = a.pagamentos?.[mes]?.multas || [];
+            updates[`/atletas/${id}/chaveAdmin`] = "veteranos07";
+            
+            update(ref(db), updates);
         }
 
         window.salvarAporteLinha = function(id, mes) {
             const val = document.getElementById(`extra-${id}`).value;
             const a = atletasCache.find(j => j.id === id);
-            if(!a.pagamentos) a.pagamentos = {};
-            if(!a.pagamentos[mes]) a.pagamentos[mes] = { pago: false, extra: 0, multas: [] };
-            a.pagamentos[mes].extra = parseFloat(val || 0);
-            window.saveAtletaFirebase(a);
+            
+            const updates = {};
+            updates[`/atletas/${id}/pagamentos/${mes}/pago`] = a.pagamentos?.[mes]?.pago || false;
+            updates[`/atletas/${id}/pagamentos/${mes}/extra`] = parseFloat(val || 0);
+            updates[`/atletas/${id}/pagamentos/${mes}/multas`] = a.pagamentos?.[mes]?.multas || [];
+            updates[`/atletas/${id}/chaveAdmin`] = "veteranos07";
+
+            update(ref(db), updates).then(() => {
+                mostrarToast("Aporte atualizado!");
+            });
         }
 
         window.processarGasto = function(e) {
             e.preventDefault();
             const hoje = new Date();
+            const idGasto = 'gasto_' + Date.now();
+            
             const novoGasto = {
-                id: 'gasto_' + Date.now(),
+                chaveAdmin: "veteranos07",
                 descricao: document.getElementById('gasto-descricao').value.trim(),
                 valor: parseFloat(document.getElementById('gasto-valor').value),
                 dataStr: `${hoje.getDate()}/${hoje.getMonth()+1}/${hoje.getFullYear()}`
             };
-            document.getElementById('form-gasto').reset();
-            window.saveGastoFirebase(novoGasto);
+
+            set(ref(db, 'gastos/' + idGasto), novoGasto)
+                .then(() => {
+                    document.getElementById('form-gasto').reset();
+                    mostrarToast("Gasto computado no Firebase!");
+                });
         }
 
         window.excluirGasto = function(id) {
-            if(confirm("Deletar lançamento de despesa?")) {
-                window.deleteGastoFirebase(id);
+            if(confirm("Deletar lançamento de despesa do Firebase?")) {
+                remove(ref(db, 'gastos/' + id))
+                    .then(() => mostrarToast("Gasto removido!"));
             }
         }
 
@@ -870,6 +906,9 @@
             });
             document.getElementById('adm-gastos-tabela').innerHTML = html;
         }
+
+        // Inicializa renderizações públicas estruturais iniciais
+        renderizarTudo();
     </script>
 
     <!-- NAVEGAÇÃO DE TELAS -->
@@ -904,7 +943,7 @@
         }
 
         function openAdminModal() {
-            if(isAdminLogado) switchTab('admin-panel');
+            if(window.isAdminLogado) switchTab('admin-panel');
             else document.getElementById('login-modal').classList.remove('hidden');
         }
         function closeAdminModal() { document.getElementById('login-modal').classList.add('hidden'); }
